@@ -8,6 +8,9 @@ __all__ = (
     "environ_filter",
     "environ_whitelist",
     "environ_whitelist_re",
+    "late_expand_keys_re",
+    "pkg_expand_re",
+    "pkg_expand_vars",
 )
 
 import re
@@ -255,6 +258,36 @@ environ_whitelist = frozenset(
 
 environ_whitelist_re = re.compile(r"^(CCACHE_|DISTCC_|QEMU_).*")
 
+# Variables which are initialized after the configuration files have
+# been parsed, and which are therefore expanded late in CCACHE_* and
+# DISTCC_* values.
+pkg_expand_vars = frozenset(
+    (
+        "CATEGORY",
+        "PN",
+        "PF",
+        "P",
+        "PV",
+        "PR",
+        "PVR",
+        "SLOT",
+        "T",
+        "WORKDIR",
+        "S",
+        "D",
+        "ED",
+        "FILESDIR",
+        "PORTAGE_BUILDDIR",
+    )
+)
+
+# Only variables which are consumed by external build tools support
+# references to package-specific variables. This avoids changing the
+# behavior of arbitrary variables from make.conf.
+late_expand_keys_re = re.compile(r"^(?:CCACHE_|DISTCC_)")
+
+pkg_expand_re = re.compile(r"\$\{(?:" + "|".join(sorted(pkg_expand_vars)) + r")\}")
+
 # Filter selected variables in the config.environ() method so that
 # they don't needlessly propagate down into the ebuild environment.
 # Exclude anything that could be extremely long here (like SRC_URI)
@@ -309,6 +342,7 @@ environ_filter = frozenset(
         "PORTAGE_BINHOST",
         "PORTAGE_BINPKG_FORMAT",
         "PORTAGE_BUILDDIR_LOCKED",
+        "PORTAGE_CCACHE_COMPILERCHECK_COMMAND",
         "PORTAGE_CHECKSUM_FILTER",
         "PORTAGE_ELOG_CLASSES",
         "PORTAGE_ELOG_MAILFROM",

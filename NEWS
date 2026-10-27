@@ -23,6 +23,15 @@ portage-3.0.84 (UNRELEASED)
 
 Features:
 
+* config: Expand package-specific variables in CCACHE_* and DISTCC_*
+  values after the package environment is initialized, so values such as
+  CCACHE_NAMESPACE="${CATEGORY}/${PN}" and CCACHE_STATSLOG="${T}/ccache.log"
+  work in make.conf and package.env.
+
+* config: Add PORTAGE_CCACHE_COMPILERCHECK_COMMAND to derive
+  CCACHE_COMPILERCHECK from a command when the build environment is
+  initialized.
+
 * emerge: Solve a circular dependency with an autounmask USE change when the
   flag was not set by the user (bug #175808).
 

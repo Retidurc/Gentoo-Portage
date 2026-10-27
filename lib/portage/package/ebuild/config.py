@@ -85,6 +85,7 @@ from portage.util import (
     stack_dictlist,
     stack_dicts,
     stack_lists,
+    varexpand,
     writemsg,
     writemsg_level,
 )
@@ -197,6 +198,9 @@ class config:
     _environ_whitelist = special_env_vars.environ_whitelist
     _environ_whitelist_re = special_env_vars.environ_whitelist_re
     _global_only_vars = special_env_vars.global_only_vars
+    _late_expand_keys_re = special_env_vars.late_expand_keys_re
+    _pkg_expand_re = special_env_vars.pkg_expand_re
+    _pkg_expand_vars = special_env_vars.pkg_expand_vars
 
     def __init__(
         self,
@@ -412,6 +416,8 @@ class config:
                     allow_sourcing=True,
                     expand=make_conf,
                     recursive=True,
+                    defer_vars=self._pkg_expand_vars,
+                    defer_keys=self._late_expand_keys_re,
                 )
                 if mygcfg is not None:
                     make_conf.update(mygcfg)
@@ -491,7 +497,11 @@ class config:
                 )
 
             make_globals = getconfig(
-                make_globals_path, tolerant=tolerant, expand=expand_map
+                make_globals_path,
+                tolerant=tolerant,
+                expand=expand_map,
+                defer_vars=self._pkg_expand_vars,
+                defer_keys=self._late_expand_keys_re,
             )
             if make_globals is None:
                 make_globals = {}
@@ -696,6 +706,8 @@ class config:
                             tolerant=tolerant,
                             expand=expand_map,
                             recursive=x.portage1_directories,
+                            defer_vars=self._pkg_expand_vars,
+                            defer_keys=self._late_expand_keys_re,
                         )
                     )
                 self._make_defaults = mygcfg_dlists
@@ -714,6 +726,8 @@ class config:
                         allow_sourcing=True,
                         expand=expand_map,
                         recursive=True,
+                        defer_vars=self._pkg_expand_vars,
+                        defer_keys=self._late_expand_keys_re,
                     )
                     or {}
                 )
@@ -2326,6 +2340,8 @@ class config:
                 tolerant=self._tolerant,
                 allow_sourcing=True,
                 expand=expand_map,
+                defer_vars=self._pkg_expand_vars,
+                defer_keys=self._late_expand_keys_re,
             )
             if penvconfig is None:
                 writemsg(
@@ -2348,6 +2364,31 @@ class config:
                             container[k] = v
                     else:
                         container[k] = v
+
+    def expand_pkg_vars(self):
+        """
+        Expand package-specific variables in late-expanded variables
+        (CCACHE_* and DISTCC_*). This must be called after the package
+        variables have been initialized by doebuild_environment().
+        """
+        pkg_configdict = self.configdict["pkg"]
+        for key in self:
+            if not self._late_expand_keys_re.match(key):
+                continue
+            value = self.get(key)
+            if not isinstance(value, str) or not self._pkg_expand_re.search(value):
+                continue
+            expanded = value
+            # Expand recursively in case one CCACHE_* or DISTCC_* value
+            # references another. Limit the number of passes to avoid
+            # looping on self-referential values.
+            for _ in range(10):
+                new_value = varexpand(expanded, mydict=self)
+                if new_value == expanded:
+                    break
+                expanded = new_value
+            if expanded != value:
+                pkg_configdict[key] = expanded
 
     def _iuse_effective_match(self, flag):
         return flag in self._iuse_effective

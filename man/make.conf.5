@@ -216,6 +216,15 @@ This variable is passed by the \fIebuild scripts\fR to the \fIconfigure\fR
 as \fI\-\-build=${CBUILD}\fR only if it is defined.  Do not set this yourself
 unless you know what you are doing.
 .TP
+\fBCCACHE_COMPILERCHECK\fR = \fI[string]\fR
+Controls how ccache verifies the compiler. See the \fBccache\fR(1) man
+page for more information. If unset and
+\fBPORTAGE_CCACHE_COMPILERCHECK_COMMAND\fR is set, Portage runs that
+command when initializing the build environment and sets
+\fBCCACHE_COMPILERCHECK\fR to \fIstring:<output>\fR. The value may
+reference package-specific variables, as described under
+\fBCCACHE_NAMESPACE\fR.
+.TP
 \fBCCACHE_DIR\fR = \fI[path]\fR
 Defines the location of the ccache working directory.  See the \fBccache\fR(1)
 man page for more information.  The default location set by Portage differs
@@ -225,9 +234,32 @@ Only trusted users should be granted write access to this location.
 
 Defaults to "${PORTAGE_TMPDIR}/ccache".
 .TP
+\fBCCACHE_LOGFILE\fR = \fI[path]\fR
+Defines the path of the ccache log file. The value may reference
+package-specific variables, so \fI"${T}/ccache.log"\fR can be used to
+keep a separate log for each package build. See the \fBccache\fR(1) man
+page for more information.
+.TP
+\fBCCACHE_NAMESPACE\fR = \fI[string]\fR
+Sets the ccache namespace, which can be used to group cache entries.
+The value may reference package-specific variables such as
+\fB${CATEGORY}\fR, \fB${PN}\fR, \fB${PF}\fR, \fB${P}\fR, \fB${PV}\fR,
+\fB${PR}\fR, \fB${PVR}\fR, \fB${SLOT}\fR, \fB${T}\fR, \fB${WORKDIR}\fR,
+\fB${S}\fR, \fB${D}\fR, \fB${ED}\fR, \fB${FILESDIR}\fR, and
+\fB${PORTAGE_BUILDDIR}\fR.
+These variables are expanded when a package build starts. For example,
+\fI"${CATEGORY}/${PN}"\fR keeps cache entries for different packages
+separate while allowing sharing between versions of the same package.
+.TP
 \fBCCACHE_SIZE\fR = \fI"size"\fR
 This controls the space use limitations for ccache.  See the \fI\-M\fR flag in
 the \fBccache\fR(1) man page for more information.
+.TP
+\fBCCACHE_STATSLOG\fR = \fI[path]\fR
+Defines the path of the ccache statistics log. The value may reference
+package-specific variables, so \fI"${T}/ccache.statslog"\fR can be used
+to keep a separate log for each package build. See the \fBccache\fR(1)
+man page for more information.
 .TP
 .B CFLAGS CXXFLAGS
 Use these variables to set the desired optimization/CPU instruction settings
@@ -1169,6 +1201,23 @@ This variable should contain a command that is suitable for portage to call
 for bzip2 compression operations. \fBPORTAGE_BZIP2_COMMAND\fR will also be
 called for extraction operation, with -d appended, unless the
 \fBPORTAGE_BUNZIP2_COMMAND\fR variable is set.
+.TP
+\fBPORTAGE_CCACHE_COMPILERCHECK_COMMAND\fR = \fI[command string]\fR
+If \fBCCACHE_COMPILERCHECK\fR is unset and \fBFEATURES\fR contains
+\fIccache\fR, Portage runs this command when initializing the build
+environment and sets \fBCCACHE_COMPILERCHECK\fR to
+\fIstring:<output>\fR. The command is split into arguments and executed
+directly, without shell interpretation; use \fIsh \-c\fR if shell syntax
+is needed. Only the first line of output is used. The command is run
+only for the \fIsetup\fR, \fIprepare\fR,
+\fIconfigure\fR, \fIcompile\fR, \fItest\fR, and \fIinstall\fR phases. If
+it fails or produces no output, Portage warns and leaves
+\fBCCACHE_COMPILERCHECK\fR unset, in which case ccache uses its default.
+.br
+.I Example:
+.nf
+PORTAGE_CCACHE_COMPILERCHECK_COMMAND="gcc -dumpfullversion"
+.fi
 .TP
 \fBPORTAGE_CGROUP_ROOT\fR = \fI[path]\fR
 Base cgroup v2 directory under which FEATURES="cgroup" creates one leaf cgroup

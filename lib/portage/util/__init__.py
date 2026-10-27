@@ -744,7 +744,13 @@ _invalid_var_name_re = re.compile(r"^\d|\W")
 
 
 def getconfig(
-    mycfg, tolerant=False, allow_sourcing=False, expand=True, recursive=False
+    mycfg,
+    tolerant=False,
+    allow_sourcing=False,
+    expand=True,
+    recursive=False,
+    defer_vars=None,
+    defer_keys=None,
 ):
     if isinstance(expand, dict):
         # Some existing variable definitions have been
@@ -769,6 +775,8 @@ def getconfig(
                     allow_sourcing=allow_sourcing,
                     expand=expand_map,
                     recursive=False,
+                    defer_vars=defer_vars,
+                    defer_keys=defer_keys,
                 )
                 or {}
             )
@@ -875,8 +883,15 @@ def getconfig(
                 continue
 
             if expand:
+                if defer_keys is not None and defer_keys.match(key) is None:
+                    key_defer_vars = None
+                else:
+                    key_defer_vars = defer_vars
                 mykeys[key] = varexpand(
-                    val, mydict=expand_map, error_leader=lex.error_leader
+                    val,
+                    mydict=expand_map,
+                    error_leader=lex.error_leader,
+                    defer_vars=key_defer_vars,
                 )
                 expand_map[key] = mykeys[key]
             else:
@@ -897,7 +912,7 @@ _varexpand_word_chars = frozenset(string.ascii_letters + string.digits + "_")
 _varexpand_unexpected_eof_msg = "unexpected EOF while looking for matching `}'"
 
 
-def varexpand(mystring, mydict=None, error_leader=None):
+def varexpand(mystring, mydict=None, error_leader=None, defer_vars=None):
     if mydict is None:
         mydict = {}
 
@@ -1016,7 +1031,9 @@ def varexpand(mystring, mydict=None, error_leader=None):
                     writemsg(msg + "\n", noiselevel=-1)
                     return ""
                 numvars += 1
-                if myvarname in mydict:
+                if defer_vars is not None and myvarname in defer_vars:
+                    newstring.append("${" + myvarname + "}")
+                elif myvarname in mydict:
                     newstring.append(mydict[myvarname])
             else:
                 newstring.append(current)

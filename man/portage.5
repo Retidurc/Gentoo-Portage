@@ -853,6 +853,13 @@ Beginners should be careful to recognize the difference between these two types
 of files. When environment variable settings are all that's needed,
 \fBpackage.env\fR is the recommended approach to use.
 
+The \fBCCACHE_*\fR and \fBDISTCC_*\fR variables may reference
+package-specific variables such as \fB${CATEGORY}\fR, \fB${PN}\fR,
+\fB${PF}\fR, \fB${T}\fR, \fB${WORKDIR}\fR, and \fB${S}\fR. These
+variables are expanded after the package environment has been initialized,
+so they can be used in both \fBmake.conf\fR(5) and package-specific
+environment files.
+
 .I Format:
 .nf
 \- comment lines begin with # (no inline comments)

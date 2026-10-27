@@ -104,6 +104,7 @@ from portage.util.cpuinfo import get_cpu_count, makeopts_to_job_count
 from portage.util.futures import asyncio
 from portage.util.futures.executor.fork import ForkExecutor
 from portage.util.lafilefixer import rewrite_lafile
+from portage.util.locale import split_LC_ALL
 from portage.util.path import first_existing
 from portage.util.socks5 import get_socks5_proxy
 from portage.versions import _pkgsplit, pkgcmp
@@ -406,6 +407,90 @@ def _xargs_command(path):
     return "xargs"
 
 
+_ccache_compilercheck_phases = frozenset(
+    ("setup", "prepare", "configure", "compile", "test", "install")
+)
+
+
+def _set_ccache_compilercheck(settings, phase):
+    """
+    Set CCACHE_COMPILERCHECK from PORTAGE_CCACHE_COMPILERCHECK_COMMAND
+    when it is unset. The command runs when the build environment is
+    initialized instead of once for every ccache invocation.
+    """
+    if phase not in _ccache_compilercheck_phases:
+        return
+    if "ccache" not in settings.features:
+        return
+    if settings.get("CCACHE_COMPILERCHECK") is not None:
+        return
+
+    command = settings.get("PORTAGE_CCACHE_COMPILERCHECK_COMMAND")
+    if not command:
+        return
+
+    try:
+        args = shlex.split(command)
+    except ValueError as e:
+        writemsg(
+            _("!!! Unable to parse PORTAGE_CCACHE_COMPILERCHECK_COMMAND: %s\n")
+            % (e,),
+            noiselevel=-1,
+        )
+        return
+
+    if not args:
+        return
+
+    # config.environ() requires LC_ALL to be split for EAPIs with a
+    # posixish locale, and that normally happens later in doebuild().
+    split_LC_ALL(settings)
+    try:
+        proc = subprocess.run(
+            args,
+            env=settings.environ(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError as e:
+        writemsg(
+            _("!!! Unable to run PORTAGE_CCACHE_COMPILERCHECK_COMMAND: %s\n") % (e,),
+            noiselevel=-1,
+        )
+        return
+
+    if proc.returncode != os.EX_OK:
+        stderr = proc.stderr.strip().splitlines()
+        detail = f": {stderr[0]}" if stderr else ""
+        writemsg(
+            _("!!! PORTAGE_CCACHE_COMPILERCHECK_COMMAND failed with status %s%s\n")
+            % (proc.returncode, detail),
+            noiselevel=-1,
+        )
+        return
+
+    lines = proc.stdout.splitlines()
+    value = lines[0].strip() if lines else ""
+    if not value:
+        writemsg(
+            _("!!! PORTAGE_CCACHE_COMPILERCHECK_COMMAND produced no output\n"),
+            noiselevel=-1,
+        )
+        return
+    if len(lines) > 1:
+        writemsg(
+            _(
+                "!!! PORTAGE_CCACHE_COMPILERCHECK_COMMAND produced "
+                "multiple lines; using the first\n"
+            ),
+            noiselevel=-1,
+        )
+
+    settings["CCACHE_COMPILERCHECK"] = f"string:{value}"
+
+
 def doebuild_environment(
     myebuild, mydo, myroot=None, settings=None, debug=False, use_cache=None, db=None
 ):
@@ -553,6 +638,10 @@ def doebuild_environment(
         # EbuildMetadataPhase handles it for the depend phase
         mysettings["SANDBOX_LOG"] = os.path.join(mysettings["T"], "sandbox.log")
     mysettings["FILESDIR"] = os.path.join(settings["PORTAGE_BUILDDIR"], "files")
+    # Set the same default as ebuild.sh so that S can be used for late
+    # expansion of CCACHE_* and DISTCC_* variables.
+    if "S" not in mysettings:
+        mysettings["S"] = os.path.join(mysettings["WORKDIR"], mysettings["P"])
 
     # Prefix forward compatibility
     eprefix_lstrip = mysettings["EPREFIX"].lstrip(os.sep)
@@ -776,6 +865,9 @@ def doebuild_environment(
                     # Filter empty elements
                     cmd = [x for x in cmd if x != ""]
                     mysettings["PORTAGE_COMPRESSION_COMMAND"] = " ".join(cmd)
+
+    mysettings.expand_pkg_vars()
+    _set_ccache_compilercheck(mysettings, mydo)
 
 
 _doebuild_manifest_cache = None
